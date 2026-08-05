@@ -8,7 +8,7 @@ env:
   # 这里已经换成了最纯正的 ImmortalWrt 官方仓库和 24.10 主线分支
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
-  NEW_LAN_IP: 192.168.6.1
+  NEW_LAN_IP: 192.168.6.131
   TZ: Asia/Shanghai
 
 jobs:
