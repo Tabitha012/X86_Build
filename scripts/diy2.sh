@@ -6,6 +6,7 @@
 #   2. 添加第三方插件源 (kenzok8)
 #   3. 直接固化 BBR 配置到固件
 #   4. 构建首次开机 UCI 初始化脚本（备用优化）
+#   5. 自动排除已知问题插件（fchomo、radicale3）
 # ❌ 无无线配置（x86 通常无内置无线，或由驱动单独管理）
 # ==========================================
 
@@ -60,7 +61,26 @@ echo "正在更新 feeds..."
 echo "feeds 更新完成。"
 
 # ==========================================
-# 4. （可选）拉取额外插件包
+# 4. 自动排除已知问题插件（避免递归依赖和缺失依赖）
+# ==========================================
+echo "正在排除问题插件..."
+
+# 移除递归依赖的 fchomo 插件（如果 .config 中存在）
+if [ -f .config ]; then
+    sed -i '/CONFIG_PACKAGE_luci-app-fchomo/d' .config 2>/dev/null || true
+    sed -i '/CONFIG_PACKAGE_luci-app-radicale3/d' .config 2>/dev/null || true
+    echo "✅ 已从 .config 中移除问题插件（fchomo、radicale3）"
+else
+    echo "⚠️ .config 文件不存在，跳过清理"
+fi
+
+# 同时从 feeds 中彻底屏蔽（防止后续被重新引入）
+# 注意：如果这些插件来自第三方源，这里只是注释掉，不影响其他插件
+# sed -i '/fchomo/d' feeds.conf.default 2>/dev/null || true
+# sed -i '/radicale3/d' feeds.conf.default 2>/dev/null || true
+
+# ==========================================
+# 5. （可选）拉取额外插件包
 # ==========================================
 # 如果有需要从 git 单独拉取的插件，可以在这里添加
 # 例如：
@@ -68,7 +88,7 @@ echo "feeds 更新完成。"
 # git clone --depth=1 https://github.com/sirpdboy/luci-app-taskplan.git package/luci-app-taskplan || echo "插件已存在或拉取失败，继续"
 
 # ==========================================
-# 5. 直接固化 BBR 配置到固件中（编译时写入）
+# 6. 直接固化 BBR 配置到固件中（编译时写入）
 # ==========================================
 echo "正在固化 BBR 配置到固件..."
 mkdir -p package/base-files/files/etc
@@ -87,8 +107,8 @@ fi
 echo "BBR 配置已写入固件的 /etc/sysctl.conf"
 
 # ==========================================
-# 6. 构建首次开机 UCI 初始化脚本（备用）
-#    如果第5步已固化，此脚本作为双保险，且可添加其他 UCI 设置
+# 7. 构建首次开机 UCI 初始化脚本（备用）
+#    如果第6步已固化，此脚本作为双保险，且可添加其他 UCI 设置
 # ==========================================
 echo "正在构建首次开机初始化脚本..."
 mkdir -p package/base-files/files/etc/uci-defaults
@@ -120,7 +140,7 @@ EOF
 echo "✅ 首次开机初始化脚本已创建 (99-custom-settings)"
 
 # ==========================================
-# 7. 完成
+# 8. 完成
 # ==========================================
 echo "=========================================="
 echo "   diy2.sh 执行完毕！"
