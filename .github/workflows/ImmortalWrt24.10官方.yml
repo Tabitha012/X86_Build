@@ -35,7 +35,7 @@ jobs:
       - name: 🔔 进度 10% - 环境初始化完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 10%\n阶段: 编译环境初始化完成\n即将开始拉取源码..." \
             --data-urlencode "sound=glass" \
@@ -49,7 +49,7 @@ jobs:
       - name: 🔔 进度 25% - 源码拉取完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 25%\n阶段: ImmortalWrt 源码拉取完成\n即将更新 feeds..." \
             --data-urlencode "sound=glass" \
@@ -65,7 +65,7 @@ jobs:
       - name: 🔔 进度 40% - Feeds 更新完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 40%\n阶段: Feeds 更新完成\n即将执行 diy2 定制脚本..." \
             --data-urlencode "sound=glass" \
@@ -80,7 +80,7 @@ jobs:
       - name: 🔔 进度 55% - diy2 脚本执行完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 55%\n阶段: diy2 定制脚本执行完成\n即将加载配置并下载依赖..." \
             --data-urlencode "sound=glass" \
@@ -108,7 +108,7 @@ jobs:
       - name: 🔔 进度 60% - 配置加载完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 60%\n阶段: 配置加载完成\n即将开始下载依赖包（此阶段受网络影响较大）..." \
             --data-urlencode "sound=glass" \
@@ -125,7 +125,7 @@ jobs:
       - name: 🔔 进度 75% - 依赖包下载完成
         if: always()
         run: |
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=⏳ OpenWrt 编译进度" \
             --data-urlencode "body=进度: 75%\n阶段: 依赖包下载完成\n即将开始核心编译（最耗时阶段，约 1-2.5 小时）..." \
             --data-urlencode "sound=glass" \
@@ -178,7 +178,7 @@ jobs:
           耗时: ${{ github.run_duration }}
           ${DETAIL}"
 
-          curl -G "https://api.day.app/${{ secrets.BARK_KEY }}" \
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
             --data-urlencode "title=📢 OpenWrt 编译最终结果" \
             --data-urlencode "body=${MESSAGE}" \
             --data-urlencode "sound=${SOUND}" \
