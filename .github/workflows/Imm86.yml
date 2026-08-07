@@ -1,4 +1,4 @@
-name: X86 云编译 (ImmortalWrt 24.10)
+name: X86 云编译De (ImmortalWrt 24.10)
 
 on:
   repository_dispatch:
