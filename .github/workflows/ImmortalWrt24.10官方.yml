@@ -19,12 +19,13 @@ jobs:
         uses: actions/checkout@main
 
       # --------------------------------------------
-      # 环境初始化 + 磁盘清理
+      # 环境初始化 + 磁盘清理 + 安装 Rust
       # --------------------------------------------
-      - name: 初始化编译环境（激进清理磁盘）
+      - name: 初始化编译环境（激进清理磁盘 + 安装 Rust 工具链）
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # 清理大块无用软件（腾出 5-8GB 空间）
           sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
           sudo rm -rf /opt/ghc /opt/hostedtoolcache /usr/local/.ghcup /usr/local/lib/node_modules 2>/dev/null
           sudo -E apt-get -y update
@@ -35,6 +36,15 @@ jobs:
           sudo docker system prune -af 2>/dev/null || true
           df -h /
           sudo timedatectl set-timezone "${TZ}"
+
+          # ========== 新增：安装 Rust 工具链 ==========
+          echo "正在安装 Rust 工具链..."
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source $HOME/.cargo/env
+          rustc --version  # 验证安装
+          cargo --version
+          # ========== Rust 安装结束 ==========
 
       - name: 拉取官方源码
         run: |
@@ -78,18 +88,19 @@ jobs:
       # --------------------------------------------
       # 编译步骤（保存日志到 build.log）
       # --------------------------------------------
-      - name: 编译固件（线程拉满）
+      - name: 编译固件（线程拉满，遇到失败跳过 -k）
         id: compile
         run: |
           cd openwrt
-          echo -e "$(nproc) thread compile"
+          echo -e "$(nproc) thread compile (keep-going mode)"
           set -o pipefail
-          make -j$(nproc) V=s 2>&1 | tee build.log
+          make -j$(nproc) V=s -k 2>&1 | tee build.log
           MAKE_RESULT=${PIPESTATUS[0]}
+          echo "make 退出码: $MAKE_RESULT"
           if [ $MAKE_RESULT -eq 0 ]; then
             echo "status=success" >> ${GITHUB_OUTPUT}
           else
-            exit $MAKE_RESULT
+            echo "status=partial" >> ${GITHUB_OUTPUT}
           fi
 
       # --------------------------------------------
@@ -120,13 +131,13 @@ jobs:
           echo "${ERROR_MSG}"
 
       # --------------------------------------------
-      # 整理固件（只保留 img + iso）
+      # 整理固件（只保留 img + iso）- 无论成功/部分成功都执行
       # --------------------------------------------
       - name: 整理固件（只保留 img + iso）
         id: organize
-        if: steps.compile.outputs.status == 'success' && !cancelled()
+        if: (steps.compile.outputs.status == 'success' || steps.compile.outputs.status == 'partial') && !cancelled()
         run: |
-          cd openwrt/bin/targets/x86/64
+          cd openwrt/bin/targets/x86/64 2>/dev/null || (echo "固件目录不存在，编译可能完全失败" && exit 1)
           rm -rf packages
           # 删除非 img/iso 文件
           find . -type f ! \( -name "*.img.gz" -o -name "*.iso" -o -name "*.img" \) -delete 2>/dev/null || true
@@ -144,13 +155,25 @@ jobs:
           path: ${{ env.FIRMWARE }}
 
       # --------------------------------------------
-      # 编译成功时 Bark 推送（可选）
+      # 部分成功 -> Bark 推送
       # --------------------------------------------
-      - name: 编译成功 -> Bark 推送
-        if: steps.organize.outputs.status == 'success' && !cancelled()
+      - name: 部分成功 -> Bark 推送
+        if: steps.organize.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'partial'
         run: |
           curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
-            --data-urlencode "title=✅ X86 云编译成功" \
-            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n固件已上传至 Artifacts" \
+            --data-urlencode "title=⚠️ X86 编译部分成功" \
+            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n部分插件可能编译失败被跳过\n固件已上传至 Artifacts" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # --------------------------------------------
+      # 完全成功 -> Bark 推送
+      # --------------------------------------------
+      - name: 完全成功 -> Bark 推送
+        if: steps.organize.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'success'
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=✅ X86 云编译完全成功" \
+            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n所有插件编译通过\n固件已上传至 Artifacts" \
             --data-urlencode "sound=glass" \
             --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
