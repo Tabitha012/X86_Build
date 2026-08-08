@@ -1,4 +1,4 @@
-name: X86 云编译De (ImmortalWrt 24.10)
+name: X86 增加跳过逻辑+Bark推送24.10
 
 on:
   repository_dispatch:
@@ -18,6 +18,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@main
 
+      # --------------------------------------------
+      # 环境初始化 + 磁盘清理
+      # --------------------------------------------
       - name: 初始化编译环境（激进清理磁盘）
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -72,21 +75,33 @@ jobs:
           make download -j8
           find dl -size -1024c -exec rm -f {} \;
 
-      - name: 编译固件（线程拉满）
+      # --------------------------------------------
+      # 编译步骤（-k 参数：遇到失败继续编译）
+      # --------------------------------------------
+      - name: 编译固件（遇到失败跳过，继续编译）
         id: compile
         run: |
           cd openwrt
-          echo -e "$(nproc) thread compile"
-          make -j$(nproc) V=s || make -j1 V=s
-          echo "status=success" >> ${GITHUB_OUTPUT}
+          echo -e "$(nproc) thread compile (keep-going mode)"
+          set -o pipefail
+          make -j$(nproc) V=s -k 2>&1 | tee build.log
+          MAKE_RESULT=${PIPESTATUS[0]}
+          echo "make 退出码: $MAKE_RESULT"
+          if [ $MAKE_RESULT -eq 0 ]; then
+            echo "status=success" >> ${GITHUB_OUTPUT}
+          else
+            echo "status=partial" >> ${GITHUB_OUTPUT}
+          fi
 
+      # --------------------------------------------
+      # 无论是否完全成功，只要固件目录存在就整理
+      # --------------------------------------------
       - name: 整理固件（只保留 img + iso）
         id: organize
-        if: steps.compile.outputs.status == 'success' && !cancelled()
+        if: (steps.compile.outputs.status == 'success' || steps.compile.outputs.status == 'partial') && !cancelled()
         run: |
-          cd openwrt/bin/targets/x86/64
+          cd openwrt/bin/targets/x86/64 2>/dev/null || (echo "固件目录不存在，编译可能完全失败" && exit 1)
           rm -rf packages
-          # 删除非 img/iso 文件
           find . -type f ! \( -name "*.img.gz" -o -name "*.iso" -o -name "*.img" \) -delete 2>/dev/null || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> ${GITHUB_OUTPUT}
@@ -97,3 +112,44 @@ jobs:
         with:
           name: ImmortalWrt_x86_Firmware
           path: ${{ env.FIRMWARE }}
+
+      # --------------------------------------------
+      # 编译失败（完全失败）-> 抓取报错 + Bark 推送
+      # --------------------------------------------
+      - name: 编译失败 -> 抓取错误并推送 Bark
+        if: failure()
+        run: |
+          cd openwrt
+          ERROR_MSG=$(grep -i "error\|failed\|make: \*\*\*" build.log 2>/dev/null | tail -3 | tr '\n' ' ' | cut -c1-200)
+          if [ -z "$ERROR_MSG" ]; then
+            ERROR_MSG="编译中断，未知错误，请检查日志。"
+          fi
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=❌ X86 云编译失败" \
+            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n报错摘要: ${ERROR_MSG}\n详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --data-urlencode "sound=alarm" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # --------------------------------------------
+      # 部分成功（有固件但可能缺插件）-> Bark 推送
+      # --------------------------------------------
+      - name: 部分成功 -> Bark 推送
+        if: steps.organize.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'partial'
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=⚠️ X86 编译部分成功" \
+            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n部分插件可能编译失败被跳过\n固件已上传至 Artifacts" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # --------------------------------------------
+      # 完全成功 -> Bark 推送
+      # --------------------------------------------
+      - name: 完全成功 -> Bark 推送
+        if: steps.organize.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'success'
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=✅ X86 云编译完全成功" \
+            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n所有插件编译通过\n固件已上传至 Artifacts" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
