@@ -1,4 +1,4 @@
-name: X86 云编译 (ImmortalWrt 24.10)
+name: 官方分支编译 (ImmortalWrt 24.10)
 
 on:
   repository_dispatch:
@@ -18,40 +18,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@main
 
-      - name: 初始化编译环境（激进清理磁盘 + Rust）
+      - name: 初始化官方编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
-          sudo rm -rf /opt/ghc /opt/hostedtoolcache /usr/local/.ghcup /usr/local/lib/node_modules 2>/dev/null
           sudo -E apt-get -y update
           sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
           sudo -E apt-get -y install $(curl -fsSL https://raw.githubusercontent.com/P3TERX/Actions-OpenWrt/main/depends-ubuntu-2204)
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
-          sudo docker system prune -af 2>/dev/null || true
-          df -h /
           sudo timedatectl set-timezone "${TZ}"
 
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          source $HOME/.cargo/env
-          rustc --version
-          cargo --version
+      - name: 进度 10% - 环境初始化完成
+        if: always()
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=OpenWrt 编译进度" \
+            --data-urlencode "body=进度: 10%\n阶段: 编译环境初始化完成\n即将开始拉取源码" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: 拉取官方源码
         run: |
           git clone -q --single-branch --depth=1 --branch=${REPO_BRANCH} ${REPO_URL} openwrt
 
-      - name: 运行 diy2 自定义脚本
+      - name: 进度 25% - 源码拉取完成
+        if: always()
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=OpenWrt 编译进度" \
+            --data-urlencode "body=进度: 25%\n阶段: 源码拉取完成\n即将添加第三方源并更新 feeds" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: 添加第三方源 + 更新 feeds + 运行 diy2 脚本
         run: |
           cd openwrt
+          # 添加 kenzo 和小型包源
+          echo "src-git kenzo https://github.com/kenzok8/openwrt-packages" >> feeds.conf.default
+          echo "src-git small https://github.com/kenzok8/small-package" >> feeds.conf.default
+          # 更新并安装所有 feeds
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          # 如果 diy2.sh 存在则执行（用于其他自定义，如 LAN IP 修改等）
           if [ -f ../scripts/diy2.sh ]; then
             chmod +x ../scripts/diy2.sh
             bash ../scripts/diy2.sh
           else
-            echo "未找到 diy2.sh，跳过"
+            echo "未找到 diy2.sh，跳过。如需要修改 LAN IP 或其他自定义，请在仓库 scripts 目录下创建该文件。"
           fi
+
+      - name: 进度 55% - 第三方源添加及 feeds 更新完成
+        if: always()
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=OpenWrt 编译进度" \
+            --data-urlencode "body=进度: 55%\n阶段: 第三方源已添加，feeds 已更新，diy2 执行完毕\n即将加载配置" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: 加载 .config
         run: |
@@ -62,14 +87,23 @@ jobs:
             echo "未找到 .config，使用默认配置"
           fi
 
-      - name: 集成自定义 files 文件夹
+      - name: 集成自定义 files 文件夹 (如果存在)
         run: |
           if [ -d "files" ]; then
             cp -a files openwrt/files
-            echo "自定义 files 文件夹已注入"
+            echo "自定义 files 文件夹已成功注入。"
           else
-            echo "未检测到 files 文件夹"
+            echo "未检测到 files 文件夹，跳过注入。"
           fi
+
+      - name: 进度 60% - 配置加载完成
+        if: always()
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=OpenWrt 编译进度" \
+            --data-urlencode "body=进度: 60%\n阶段: 配置加载完成\n即将开始下载依赖包" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: 下载依赖包
         run: |
@@ -78,75 +112,60 @@ jobs:
           make download -j8
           find dl -size -1024c -exec rm -f {} \;
 
-      # ==========================================
-      # 编译步骤（保存日志到 build.log）
-      # ==========================================
-      - name: 编译固件（线程拉满）
+      - name: 进度 75% - 依赖包下载完成
+        if: always()
+        run: |
+          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
+            --data-urlencode "title=OpenWrt 编译进度" \
+            --data-urlencode "body=进度: 75%\n阶段: 依赖包下载完成\n即将开始核心编译（最耗时阶段，约 1-2.5 小时）" \
+            --data-urlencode "sound=glass" \
+            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: 开启官方标准编译
         id: compile
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          set -o pipefail
-          make -j$(nproc) V=s 2>&1 | tee build.log
-          MAKE_RESULT=${PIPESTATUS[0]}
-          if [ $MAKE_RESULT -eq 0 ]; then
-            echo "status=success" >> ${GITHUB_OUTPUT}
-          else
-            exit $MAKE_RESULT
-          fi
+          make -j$(($(nproc) + 1)) V=s || make -j1 || make -j1 V=s
+          echo "status=success" >> ${GITHUB_OUTPUT}
 
-      # ==========================================
-      # 报错汇总层（编译失败时独立展示所有报错）
-      # ==========================================
-      - name: 📋 报错汇总（编译失败时查看）
-        if: failure()
-        run: |
-          cd openwrt
-          echo "=========================================="
-          echo "         编译报错汇总"
-          echo "=========================================="
-          grep -E "Error|error|failed|make: \*\*\*" build.log 2>/dev/null || echo "未抓到标准错误行"
-          echo "=========================================="
-          echo "    以上为本次编译的所有报错行"
-          echo "=========================================="
-
-      # ==========================================
-      # 编译失败 -> Bark 通知（仅通知，不推送详情）
-      # ==========================================
-      - name: 编译失败 -> Bark 通知
-        if: failure()
-        run: |
-          curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
-            --data-urlencode "title=❌ X86 云编译失败" \
-            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n请查看 Actions 日志中的「报错汇总」层定位问题" \
-            --data-urlencode "sound=alarm" \
-            --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-      # ==========================================
-      # 整理固件（只保留 img + iso）
-      # ==========================================
-      - name: 整理固件（只保留 img + iso）
+      - name: 整理打包出的固件
         id: organize
         if: steps.compile.outputs.status == 'success' && !cancelled()
         run: |
-          cd openwrt/bin/targets/x86/64
+          cd openwrt/bin/targets/*/*
           rm -rf packages
-          find . -type f ! \( -name "*.img.gz" -o -name "*.iso" -o -name "*.img" \) -delete 2>/dev/null || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: 上传固件
+      - name: 上传固件到 Artifacts
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: ImmortalWrt_x86_Firmware
+          name: RAX3000M_Official_Firmware
           path: ${{ env.FIRMWARE }}
 
-      - name: 编译成功 -> Bark 通知
-        if: steps.organize.outputs.status == 'success' && !cancelled()
+      - name: 编译完成 - 最终结果
+        if: always()
         run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            STATUS="编译成功"
+            SOUND="glass"
+            DETAIL="固件已上传至 Artifacts，可直接下载刷机"
+          else
+            STATUS="编译失败"
+            SOUND="alarm"
+            DETAIL="请点击下方链接查看详细日志定位失败原因"
+          fi
+
+          MESSAGE="${STATUS}
+          仓库: ${{ github.repository }}
+          分支: ${{ github.ref_name }}
+          耗时: ${{ github.run_duration }}
+          ${DETAIL}"
+
           curl -G "https://api.day.app/genMFkPnbNuNTFRKNxwyze" \
-            --data-urlencode "title=✅ X86 云编译成功" \
-            --data-urlencode "body=仓库: ${{ github.repository }}\n分支: ${{ github.ref_name }}\n耗时: ${{ github.run_duration }}\n固件已上传至 Artifacts" \
-            --data-urlencode "sound=glass" \
+            --data-urlencode "title=OpenWrt 编译最终结果" \
+            --data-urlencode "body=${MESSAGE}" \
+            --data-urlencode "sound=${SOUND}" \
             --data-urlencode "url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
